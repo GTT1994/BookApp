@@ -7,10 +7,6 @@ options:
   developmentLanguage: en
   createIntermediateGroups: true
 
-configFiles:
-  Debug: Configs/Secrets.xcconfig
-  Release: Configs/Secrets.xcconfig
-
 targets:
   BookApp:
     type: application
@@ -25,7 +21,6 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: "BookApp uses your camera to scan book spines and barcodes so it can identify books and add them to your shelf."
-        GoogleBooksAPIKey: "$(GOOGLE_BOOKS_API_KEY)"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gtt1994.BookApp

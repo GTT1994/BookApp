@@ -10,110 +10,117 @@ struct BookResult: Identifiable, Hashable {
 
 enum BookLookupError: LocalizedError {
     case badResponse
-    case server(statusCode: Int, message: String?)
+    case server(statusCode: Int)
 
     var errorDescription: String? {
         switch self {
         case .badResponse:
             return "The server sent back something unexpected."
-        case .server(let statusCode, let message):
+        case .server(let statusCode):
             if statusCode == 429 {
-                return "Rate limit hit (429) — see README for adding your own Google Books API key."
+                return "Too many requests right now — wait a moment and try again."
             }
-            return "Google Books returned an error (\(statusCode))\(message.map { ": \($0)" } ?? "")."
+            return "Open Library returned an error (\(statusCode))."
         }
     }
 }
 
+/// Looks books up via the Open Library API (openlibrary.org), which is free with no API key,
+/// registration, or billing required.
 struct BookLookupService {
     private let session: URLSession
-
-    /// A free API key from https://console.cloud.google.com/ (Books API enabled). Without one,
-    /// requests share a small daily quota with everyone else who also has no key, which can run
-    /// dry — see README.md for how to add your own.
-    private var apiKey: String? {
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "GoogleBooksAPIKey") as? String,
-              !key.isEmpty else { return nil }
-        return key
-    }
 
     init(session: URLSession = .shared) {
         self.session = session
     }
 
-    /// Searches the Google Books catalog with a free-text query (title, author, or a raw OCR transcript).
+    /// Searches by free-text query (title, author, or a raw OCR transcript from a spine).
     func search(query: String) async throws -> [BookResult] {
-        var components = URLComponents(string: "https://www.googleapis.com/books/v1/volumes")!
-        var queryItems = [
+        var components = URLComponents(string: "https://openlibrary.org/search.json")!
+        components.queryItems = [
             URLQueryItem(name: "q", value: query),
-            URLQueryItem(name: "maxResults", value: "10")
+            URLQueryItem(name: "limit", value: "10"),
+            URLQueryItem(name: "fields", value: "key,title,author_name,isbn,cover_i")
         ]
-        if let apiKey {
-            queryItems.append(URLQueryItem(name: "key", value: apiKey))
-        }
-        components.queryItems = queryItems
         guard let url = components.url else { throw BookLookupError.badResponse }
 
-        let (data, response) = try await session.data(from: url)
-        guard let http = response as? HTTPURLResponse else { throw BookLookupError.badResponse }
-        guard http.statusCode == 200 else {
-            let message = try? JSONDecoder().decode(GoogleBooksErrorResponse.self, from: data).error.message
-            throw BookLookupError.server(statusCode: http.statusCode, message: message)
-        }
-
-        let decoded = try JSONDecoder().decode(GoogleBooksResponse.self, from: data)
-        return (decoded.items ?? []).map { $0.asBookResult }
+        let data = try await fetch(url)
+        let decoded = try JSONDecoder().decode(OpenLibrarySearchResponse.self, from: data)
+        return decoded.docs.map { $0.asBookResult }
     }
 
     /// Looks up a single book by its ISBN, typically from a scanned barcode.
     func searchByISBN(_ isbn: String) async throws -> BookResult? {
-        try await search(query: "isbn:\(isbn)").first
+        var components = URLComponents(string: "https://openlibrary.org/api/books")!
+        components.queryItems = [
+            URLQueryItem(name: "bibkeys", value: "ISBN:\(isbn)"),
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "jscmd", value: "data")
+        ]
+        guard let url = components.url else { throw BookLookupError.badResponse }
+
+        let data = try await fetch(url)
+        let decoded = try JSONDecoder().decode([String: OpenLibraryBookData].self, from: data)
+        guard let bookData = decoded["ISBN:\(isbn)"] else { return nil }
+        return bookData.asBookResult(isbn: isbn)
+    }
+
+    private func fetch(_ url: URL) async throws -> Data {
+        var request = URLRequest(url: url)
+        // Open Library asks API consumers to identify themselves via User-Agent as good practice.
+        request.setValue("BookApp/1.0 (iOS bookshelf app)", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw BookLookupError.badResponse }
+        guard http.statusCode == 200 else { throw BookLookupError.server(statusCode: http.statusCode) }
+        return data
     }
 }
 
-private struct GoogleBooksErrorResponse: Decodable {
-    let error: ErrorBody
-    struct ErrorBody: Decodable {
-        let message: String
-    }
-}
+private struct OpenLibrarySearchResponse: Decodable {
+    let docs: [Doc]
 
-private struct GoogleBooksResponse: Decodable {
-    let items: [Item]?
-
-    struct Item: Decodable {
-        let id: String
-        let volumeInfo: VolumeInfo
+    struct Doc: Decodable {
+        let key: String
+        let title: String
+        let author_name: [String]?
+        let isbn: [String]?
+        let cover_i: Int?
 
         var asBookResult: BookResult {
             BookResult(
-                id: id,
-                title: volumeInfo.title,
-                authors: volumeInfo.authors ?? ["Unknown Author"],
-                isbn: volumeInfo.industryIdentifiers?.first(where: { $0.type.contains("ISBN") })?.identifier,
-                thumbnailURL: volumeInfo.imageLinks?.secureThumbnailURL
+                id: key,
+                title: title,
+                authors: author_name ?? ["Unknown Author"],
+                isbn: isbn?.first,
+                thumbnailURL: cover_i.flatMap { URL(string: "https://covers.openlibrary.org/b/id/\($0)-M.jpg") }
             )
         }
     }
+}
 
-    struct VolumeInfo: Decodable {
-        let title: String
-        let authors: [String]?
-        let industryIdentifiers: [IndustryIdentifier]?
-        let imageLinks: ImageLinks?
+private struct OpenLibraryBookData: Decodable {
+    let title: String
+    let authors: [Author]?
+    let cover: Cover?
+
+    struct Author: Decodable {
+        let name: String
     }
 
-    struct IndustryIdentifier: Decodable {
-        let type: String
-        let identifier: String
+    struct Cover: Decodable {
+        let small: String?
+        let medium: String?
+        let large: String?
     }
 
-    struct ImageLinks: Decodable {
-        let thumbnail: String?
-
-        var secureThumbnailURL: URL? {
-            guard let thumbnail else { return nil }
-            return URL(string: thumbnail.replacingOccurrences(of: "http://", with: "https://"))
-        }
+    func asBookResult(isbn: String) -> BookResult {
+        BookResult(
+            id: "ISBN:\(isbn)",
+            title: title,
+            authors: authors?.map(\.name) ?? ["Unknown Author"],
+            isbn: isbn,
+            thumbnailURL: (cover?.medium ?? cover?.small).flatMap(URL.init)
+        )
     }
 }

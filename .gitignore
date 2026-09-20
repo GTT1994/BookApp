@@ -13,6 +13,3 @@ xcuserdata/
 
 # macOS
 .DS_Store
-
-# Secrets
-Configs/Secrets.xcconfig
