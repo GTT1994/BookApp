@@ -64,12 +64,25 @@ You'll need a Mac with Xcode installed (this app needs the iOS 17 SDK, so Xcode 
    author's Personal Team — in Xcode, select the `BookApp` target → *Signing & Capabilities* →
    change *Team* to your own Apple ID/team (or edit `DEVELOPMENT_TEAM` in `project.yml` and
    re-run `xcodegen generate`).
-5. **Run on a physical iPhone.** Live spine/barcode scanning uses the camera via
+5. **Get a free Google Books API key** (strongly recommended — see the note below):
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/), create/select a project.
+   - *APIs & Services → Library* → search **Books API** → **Enable**.
+   - *APIs & Services → Credentials* → **Create Credentials → API Key** → copy it.
+   - Copy `Configs/Secrets.xcconfig.example` to `Configs/Secrets.xcconfig` (gitignored, so your
+     key never gets committed) and paste your key after `GOOGLE_BOOKS_API_KEY =`.
+   - Re-run `xcodegen generate` and rebuild.
+6. **Run on a physical iPhone.** Live spine/barcode scanning uses the camera via
    `DataScannerViewController`, which **does not work in the iOS Simulator** — you must run on a
    real device (iOS 16+) to test scanning. The manual-search fallback works in the Simulator too.
 
 Whenever you pull changes that touch `project.yml` (or add/remove/move Swift files), re-run
 `xcodegen generate` to regenerate the project.
+
+> **Why the API key matters:** without one, requests share a small anonymous daily quota with
+> *everyone* who also has no key — it's easy to exhaust (a few hundred requests/day, shared
+> globally) and once it's gone every search fails with a 429 "quota exceeded" error, which looks
+> just like "no matches found" if you're not checking Xcode's console. A free key gives you your
+> own generous per-day quota.
 
 ## Re-enabling iCloud sync
 
@@ -103,6 +116,5 @@ If you later upgrade to the paid Apple Developer Program, you can turn CloudKit 
   identifier if you plan to distribute the app.
 - Add a real app icon image to `BookApp/Resources/Assets.xcassets/AppIcon.appiconset` before
   submitting to the App Store — right now it's an empty placeholder slot.
-- The Google Books API works without a key for light usage; if you hit rate limits, get a free
-  API key from the [Google Cloud Console](https://console.cloud.google.com/) and add it as a
-  `key` query parameter in `BookLookupService`.
+- Make sure `Configs/Secrets.xcconfig` has your Google Books API key set (see setup step 5) —
+  without it you're on the easily-exhausted shared anonymous quota.

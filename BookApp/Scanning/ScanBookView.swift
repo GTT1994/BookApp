@@ -84,7 +84,7 @@ struct ScanBookView: View {
                     statusMessage = "No match found for that barcode."
                 }
             } catch {
-                statusMessage = "Lookup failed — check your connection and try again."
+                statusMessage = error.localizedDescription
             }
         }
     }
@@ -108,7 +108,7 @@ struct ScanBookView: View {
                     statusMessage = "No matches yet — keep scanning the spine."
                 }
             } catch {
-                statusMessage = "No matches yet — keep scanning the spine."
+                statusMessage = error.localizedDescription
             }
         }
     }

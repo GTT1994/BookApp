@@ -9,6 +9,7 @@ struct ManualSearchView: View {
     @State private var results: [BookResult] = []
     @State private var isSearching = false
     @State private var searchTask: Task<Void, Never>?
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -28,6 +29,8 @@ struct ManualSearchView: View {
             .overlay {
                 if isSearching {
                     ProgressView()
+                } else if let errorMessage {
+                    ContentUnavailableView("Search Failed", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
                 } else if results.isEmpty && !query.isEmpty {
                     ContentUnavailableView.search(text: query)
                 }
@@ -49,6 +52,7 @@ struct ManualSearchView: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             results = []
+            errorMessage = nil
             return
         }
         searchTask = Task {
@@ -56,7 +60,13 @@ struct ManualSearchView: View {
             guard !Task.isCancelled else { return }
             isSearching = true
             defer { isSearching = false }
-            results = (try? await BookLookupService().search(query: trimmed)) ?? []
+            do {
+                results = try await BookLookupService().search(query: trimmed)
+                errorMessage = nil
+            } catch {
+                results = []
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }
