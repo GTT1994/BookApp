@@ -1,7 +1,12 @@
 # BookApp
 
 Scan the spine of a physical book with your iPhone's camera and add it straight to a virtual
-bookshelf. Your shelf syncs across your own devices via iCloud.
+bookshelf.
+
+> **Storage note:** the shelf is currently local-only (on-device). It was originally built with
+> iCloud/CloudKit sync, but that requires a paid Apple Developer Program membership — free
+> Personal Team accounts are blocked from the iCloud capability entirely. See
+> [Re-enabling iCloud sync](#re-enabling-icloud-sync) below if you upgrade later.
 
 ## How it works
 
@@ -16,9 +21,9 @@ bookshelf. Your shelf syncs across your own devices via iCloud.
   — spine OCR is inherently a bit noisy, so this avoids adding the wrong book.
 - **Manual add**: if scanning doesn't find anything (bad lighting, a device that doesn't support
   live scanning, etc.), you can search Google Books directly by title/author/ISBN.
-- **Storage & sync** (`BookApp/Models/Book.swift`, `BookApp/App/BookAppApp.swift`): books are
-  stored with SwiftData, configured with `cloudKitDatabase: .automatic` so your shelf syncs
-  across your devices via your iCloud account — no backend server required.
+- **Storage** (`BookApp/Models/Book.swift`, `BookApp/App/BookAppApp.swift`): books are stored
+  on-device with SwiftData. No backend server required, but the shelf doesn't currently sync
+  across your devices (see the storage note above).
 
 ## Project structure
 
@@ -55,20 +60,42 @@ You'll need a Mac with Xcode installed (this app needs the iOS 17 SDK, so Xcode 
    xcodegen generate
    ```
    This creates `BookApp.xcodeproj`. Open it with `open BookApp.xcodeproj`.
-4. **Set your signing team.** In Xcode, select the `BookApp` target → *Signing & Capabilities* →
-   choose your Apple ID/team under *Team*. This also updates the bundle identifier's provisioning.
-5. **Enable iCloud/CloudKit.** The entitlements already request an iCloud container and CloudKit
-   service, but the first time you build, Xcode needs to actually provision that container on
-   your account:
-   - In *Signing & Capabilities*, click **+ Capability** → add **iCloud** → check **CloudKit**.
-   - Xcode will offer to create a new container (e.g. `iCloud.com.gtt1994.BookApp`) — accept it.
-   - You'll need an active (free or paid) Apple Developer account signed into Xcode for this.
-6. **Run on a physical iPhone.** Live spine/barcode scanning uses the camera via
+4. **Set your signing team.** `project.yml` has a `DEVELOPMENT_TEAM` filled in for the original
+   author's Personal Team — in Xcode, select the `BookApp` target → *Signing & Capabilities* →
+   change *Team* to your own Apple ID/team (or edit `DEVELOPMENT_TEAM` in `project.yml` and
+   re-run `xcodegen generate`).
+5. **Run on a physical iPhone.** Live spine/barcode scanning uses the camera via
    `DataScannerViewController`, which **does not work in the iOS Simulator** — you must run on a
    real device (iOS 16+) to test scanning. The manual-search fallback works in the Simulator too.
 
 Whenever you pull changes that touch `project.yml` (or add/remove/move Swift files), re-run
 `xcodegen generate` to regenerate the project.
+
+## Re-enabling iCloud sync
+
+If you later upgrade to the paid Apple Developer Program, you can turn CloudKit sync back on:
+
+1. In `BookApp/App/BookAppApp.swift`, change:
+   ```swift
+   let configuration = ModelConfiguration(schema: schema)
+   ```
+   back to:
+   ```swift
+   let configuration = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
+   ```
+2. In `project.yml`, add back an `entitlements` block under the `BookApp` target:
+   ```yaml
+   entitlements:
+     path: Generated/BookApp.entitlements
+     properties:
+       com.apple.developer.icloud-container-identifiers:
+         - "iCloud.$(PRODUCT_BUNDLE_IDENTIFIER)"
+       com.apple.developer.icloud-services:
+         - CloudKit
+       com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)$(CFBundleIdentifier)"
+   ```
+3. Run `xcodegen generate`, reopen the project, and in *Signing & Capabilities* add the **iCloud**
+   capability with **CloudKit** checked (Xcode will offer to create a container — accept it).
 
 ## Notes for shipping later
 

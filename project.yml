@@ -21,19 +21,12 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: "BookApp uses your camera to scan book spines and barcodes so it can identify books and add them to your shelf."
-    entitlements:
-      path: Generated/BookApp.entitlements
-      properties:
-        com.apple.developer.icloud-container-identifiers:
-          - "iCloud.$(PRODUCT_BUNDLE_IDENTIFIER)"
-        com.apple.developer.icloud-services:
-          - CloudKit
-        com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)$(CFBundleIdentifier)"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gtt1994.BookApp
         PRODUCT_NAME: BookApp
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: GVBZLR62RH
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
